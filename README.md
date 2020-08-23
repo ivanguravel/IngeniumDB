@@ -7,7 +7,7 @@ Powerfull Opensource DB (https://en.wiktionary.org/wiki/ingenium - special thank
 ## Main functionality:
 
 ### - Release 0.0.1-SNAPSHOT:
-- distributed mode for storing large files across a cluster with connectors: S3, Azure Blob, Bare Metal
+- distributed fileservice for storing large files across a cluster with connectors: S3, Azure Blob, Bare Metal
 - query language for gettimg fast access to the files (their metadata). Users can form metadata for their side
 - fast reading in streaming mode 
 
