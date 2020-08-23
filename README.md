@@ -22,5 +22,5 @@ Powerfull Opensource DB (https://en.wiktionary.org/wiki/ingenium - special thank
 - defragmentation for files for fast data streaming
 
 ## PoC architecture:
-![diagram](pictures/architecture.png "architecture")
+![diagram](architecture.png "architecture")
 
