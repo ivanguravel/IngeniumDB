@@ -1,12 +1,12 @@
-package org.ivzh.backtracking;
+package org.ivzh.bzip.indexer.stream;
 
 import java.io.*;
 
 public class ExtendedBzipInputStream extends InputStream {
 
 
-     long FILE_SIGNATURE = 0x3034464649445342L;
-     int HEADER_SIZE = 32;
+    long FILE_SIGNATURE = 0x3034464649445342L;
+    int HEADER_SIZE = 32;
 
     private RandomAccessFile file;
 
@@ -23,20 +23,20 @@ public class ExtendedBzipInputStream extends InputStream {
     public int read() throws IOException {
         return 0;
     }
-
+    
     /*
-			File format:
-				0	8	"BSDIFF40"
-				8	8	X
-				16	8	Y
-				24	8	sizeof(newfile)
-				32	X	bzip2(control block)
-				32+X	Y	bzip2(diff block)
-				32+X+Y	???	bzip2(extra block)
-			with control block a set of triples (x,y,z) meaning "add x bytes
-			from oldfile to x bytes from the diff block; copy y bytes from the
-			extra block; seek forwards in oldfile by z bytes".
-			*/
+        File format:
+            0	8	"BSDIFF40"
+            8	8	X
+            16	8	Y
+            24	8	sizeof(newfile)
+            32	X	bzip2(control block)
+            32+X	Y	bzip2(diff block)
+            32+X+Y	???	bzip2(extra block)
+        with control block a set of triples (x,y,z) meaning "add x bytes
+        from oldfile to x bytes from the diff block; copy y bytes from the
+        extra block; seek forwards in oldfile by z bytes".
+    */
     public String readBlockHeaders() {
         byte[] header = null;
         try {
@@ -58,6 +58,7 @@ public class ExtendedBzipInputStream extends InputStream {
             throw new RuntimeException("Corrupt patch.");
         }
 
+        // TODO. read blocks
         return "";
     }
 
@@ -98,8 +99,7 @@ public class ExtendedBzipInputStream extends InputStream {
             throw new IllegalArgumentException("count");
         }
 
-        while (count > 0)
-        {
+        while (count > 0) {
             int bytesRead = this.file.read(buffer, offset, count);
             if (bytesRead == 0) {
                 throw new RuntimeException("end of stream");
