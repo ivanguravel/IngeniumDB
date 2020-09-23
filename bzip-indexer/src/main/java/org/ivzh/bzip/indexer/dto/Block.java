@@ -1,12 +1,22 @@
 package org.ivzh.bzip.indexer.dto;
 
-class Part {
+
+// TODO make builder
+public class Block {
 
     int blockNum;
     long blockOffset;
     long blockLength;
     long dataOffset;
     long dataLength;
+
+    public Block(int blockNum, long blockOffset, long blockLength, long dataOffset, long dataLength) {
+        this.blockNum = blockNum;
+        this.blockOffset = blockOffset;
+        this.blockLength = blockLength;
+        this.dataOffset = dataOffset;
+        this.dataLength = dataLength;
+    }
 
     public int getBlockNum() {
         return blockNum;
@@ -46,5 +56,16 @@ class Part {
 
     public void setDataLength(long dataLength) {
         this.dataLength = dataLength;
+    }
+
+    @Override
+    public String toString() {
+        return "{" +
+                "blockNum=" + blockNum +
+                ", blockOffset=" + blockOffset +
+                ", blockLength=" + blockLength +
+                ", dataOffset=" + dataOffset +
+                ", dataLength=" + dataLength +
+                '}';
     }
 }
