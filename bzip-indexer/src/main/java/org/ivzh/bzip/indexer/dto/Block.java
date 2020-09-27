@@ -10,6 +10,9 @@ public class Block {
     long dataOffset;
     long dataLength;
 
+    public Block() {
+    }
+
     public Block(int blockNum, long blockOffset, long blockLength, long dataOffset, long dataLength) {
         this.blockNum = blockNum;
         this.blockOffset = blockOffset;

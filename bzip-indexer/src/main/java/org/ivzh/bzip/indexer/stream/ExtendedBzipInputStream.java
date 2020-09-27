@@ -1,14 +1,27 @@
 package org.ivzh.bzip.indexer.stream;
 
 import java.io.*;
+import java.nio.charset.StandardCharsets;
 import java.util.LinkedList;
 import java.util.List;
+
+import org.apache.hadoop.io.compress.BZip2Codec;
+import org.apache.hadoop.io.compress.SplittableCompressionCodec;
 import org.ivzh.bzip.indexer.dto.Block;
 import org.ivzh.bzip.indexer.dto.Huffman;
+import org.ivzh.bzip.indexer.dto.StreamBlock;
 
 import static org.ivzh.bzip.indexer.util.Const.*;
 
 public class ExtendedBzipInputStream extends InputStream {
+
+
+    private static final String HEADER = "BZ";
+    private static final int HEADER_LEN = HEADER.length();
+    private static final String SUB_HEADER = "h9";
+    private static final int SUB_HEADER_LEN = SUB_HEADER.length();
+
+
     private RandomAccessFile file;
     private byte[] fileBuffer;
     private long streamOffset;
@@ -30,6 +43,7 @@ public class ExtendedBzipInputStream extends InputStream {
     }
 
     public List<Block> indexBzip() throws IOException {
+        StreamBlock streamBlock = initialiseStream();
         int count = 0;
         List<Block> result = new LinkedList<>();
         Block block = readBlock(count);
@@ -41,31 +55,52 @@ public class ExtendedBzipInputStream extends InputStream {
         return result;
     }
 
-    protected Block readBlock(int blockNumber) {
-        if (fileBuffer == null) {
-            fileBuffer = new byte[COMPRESSED_BLOCK_SIZE];
-        }
-        long blockAddress = streamOffset;
-        try {
-            final int headerByteCount = read(fileBuffer, 0, HEADER_SIZE);
-            streamOffset += headerByteCount;
-            if (headerByteCount == 0) {
-                // last block
-                return new Block(blockNumber, blockAddress, 0, 0, 0);
-            }
-//            if (headerByteCount != HEADER_SIZE) {
-//                throw  new UnsupportedOperationException("header block was broken");
-//            }
-            final int blockLength = getBlockSize(fileBuffer, BLOCK_LENGTH_OFFSET) + 1;
+    public Block readBlock(int blockNumber) throws IOException {
+//        byte[] headerBytes = new byte[HEADER_LEN];
+//        int actualRead = this.file.read(headerBytes, 0, HEADER_LEN);
+//        if (actualRead != -1) {
+//
+//            actualRead = this.file.read(headerBytes, 0,
+//                    SUB_HEADER_LEN);
+//            String header = new String(headerBytes, StandardCharsets.UTF_8);
+//            System.out.println(header);
+//        }
 
-            final int remaining = blockLength - headerByteCount;
-            final int dataByteCount = read(fileBuffer, HEADER_SIZE, remaining);
-            streamOffset += dataByteCount;
-            // TODO find decompressed size
-            return new Block(blockNumber, streamOffset, blockLength, 0, dataByteCount);
+
+
+        return new Block();
+    }
+
+    /**
+     * Reads the stream header and checks that the data appears to be a valid BZip2 stream
+     * @throws IOException if the stream header is not valid
+     */
+    private StreamBlock initialiseStream() throws IOException {
+
+        StreamBlock streamBlock = new StreamBlock();
+
+
+        /* Read the stream header */
+        try {
+            int marker1 = readBits(16);
+            int marker2 = readBits(8);
+            int blockSize = (readBits(8) - '0');
+
+            if (
+                    ((marker1 != STREAM_START_MARKER_1))
+                            || (marker2 != STREAM_START_MARKER_2)
+                            || (blockSize < 1) || (blockSize > 9)) {
+                throw new UnsupportedOperationException("Invalid BZip2 header");
+            }
+
+            streamBlock.setBlockLength(blockSize * 100000);
         } catch (IOException e) {
-            throw new UnsupportedOperationException(e.getMessage());
+            // If the stream header was not valid, stop trying to read more data
+            streamBlock.setStreamComplete(true);
+            throw e;
         }
+
+        return streamBlock;
     }
 
     public int read(final byte[] buffer, final int offset, final int length) throws IOException {
@@ -117,6 +152,41 @@ public class ExtendedBzipInputStream extends InputStream {
         return (bitBuffer >>> bitCount) & ((1 << count) - 1);
 
     }
+
+//    private BufferedInputStream readStreamHeader() throws IOException {
+//        // We are flexible enough to allow the compressed stream not to
+//        // start with the header of BZ. So it works fine either we have
+//        // the header or not.
+//        if (super.in != null) {
+//            bufferedIn.mark(HEADER_LEN);
+//            byte[] headerBytes = new byte[HEADER_LEN];
+//            int actualRead = bufferedIn.read(headerBytes, 0, HEADER_LEN);
+//            if (actualRead != -1) {
+//                String header = new String(headerBytes, StandardCharsets.UTF_8);
+//                if (header.compareTo(HEADER) != 0) {
+//                    bufferedIn.reset();
+//                } else {
+//                    this.isHeaderStripped = true;
+//                    // In case of BYBLOCK mode, we also want to strip off
+//                    // remaining two character of the header.
+//                    if (this.readMode == SplittableCompressionCodec.READ_MODE.BYBLOCK) {
+//                        actualRead = bufferedIn.read(headerBytes, 0,
+//                                SUB_HEADER_LEN);
+//                        if (actualRead != -1) {
+//                            this.isSubHeaderStripped = true;
+//                        }
+//                    }
+//                }
+//            }
+//        }
+//
+//        if (bufferedIn == null) {
+//            throw new IOException("Failed to read bzip2 stream.");
+//        }
+//
+//        return bufferedIn;
+//
+//    }
 
 
     private int readInteger() throws IOException {
