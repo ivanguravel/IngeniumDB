@@ -71,6 +71,14 @@ public class ExtendedBzipInputStream extends InputStream {
         return new Block();
     }
 
+    public void readBlockHeader() throws IOException {
+        int magic1 = readBits(24);
+        int magic2 = readBits(24);
+        int headerCRC = readBits(32);
+
+
+    }
+
     /**
      * Reads the stream header and checks that the data appears to be a valid BZip2 stream
      * @throws IOException if the stream header is not valid
