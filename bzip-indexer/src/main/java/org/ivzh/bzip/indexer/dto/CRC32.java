@@ -45,7 +45,7 @@ public class CRC32 {
 
     public int getCRC() {
 
-        return crc;
+        return  (~crc) >>> 0;
 
     }
 
@@ -57,7 +57,7 @@ public class CRC32 {
 
     }
 
-    public void updateCRC(final int value, int count) {
+    public void updateCRCRun(final int value, int count) {
 
         int crc = this.crc;
 
@@ -65,7 +65,7 @@ public class CRC32 {
             crc = (crc << 8) ^ crc32Lookup[((crc >> 24) ^ value) & 0xff];
         }
 
-        crc = crc;
+        this.crc = crc;
 
     }
 }

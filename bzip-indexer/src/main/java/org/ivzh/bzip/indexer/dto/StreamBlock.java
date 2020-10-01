@@ -1,33 +1,24 @@
 package org.ivzh.bzip.indexer.dto;
 
-public class StreamBlock extends Block {
-
-    boolean streamComplete;
-    boolean headerless;
-    int streamCRC;
+public class StreamBlock {
 
 
-    public boolean isStreamComplete() {
-        return streamComplete;
+
+    public int read(byte[] buffer, int bufOffset, int length) {
+        byte bytesRead = 0;
+        while (bytesRead < length) {
+            byte c = this.readByte();
+            if (c < 0) { // EOF
+                return (bytesRead==0) ? -1 : bytesRead;
+            }
+            buffer[bufOffset++] = c;
+            bytesRead++;
+        }
+        return bytesRead;
     }
 
-    public void setStreamComplete(boolean streamComplete) {
-        this.streamComplete = streamComplete;
-    }
-
-    public boolean isHeaderless() {
-        return headerless;
-    }
-
-    public void setHeaderless(boolean headerless) {
-        this.headerless = headerless;
-    }
-
-    public int getStreamCRC() {
-        return streamCRC;
-    }
-
-    public void setStreamCRC(int streamCRC) {
-        this.streamCRC = streamCRC;
+    // mock 4 now
+    public byte readByte() {
+        return 0;
     }
 }
