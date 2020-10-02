@@ -15,6 +15,11 @@ import static org.ivzh.bzip.indexer.util.Const.*;
 public class ExtendedBzipInputStream extends InputStream {
 
 
+    private static final String WHOLEPI = "314159265359";
+    private static final String SQRTPI = "177245385090";
+
+
+
     private static final String HEADER = "BZ";
     private static final int HEADER_LEN = HEADER.length();
     private static final String SUB_HEADER = "h9";
@@ -25,6 +30,13 @@ public class ExtendedBzipInputStream extends InputStream {
     private BitReader reader;
     private CRC32 crc32;
     private StreamBlock streamBlock;
+
+     int dbufSize;
+     int nextoutput;
+     int streamCRC;
+
+     int targetBlockCRC;
+
 
 
 
@@ -38,6 +50,11 @@ public class ExtendedBzipInputStream extends InputStream {
         this.reader = new BitReader(file);
         this.crc32 = new CRC32();
         this.streamBlock = new StreamBlock();
+        try {
+            startBunzip();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
     }
 
     @Override
@@ -49,12 +66,20 @@ public class ExtendedBzipInputStream extends InputStream {
         StreamBlock streamBlock = initialiseStream();
         int count = 0;
         List<Block> result = new LinkedList<>();
-        Block block = readBlock(count);
-        result.add(block);
-        while (block.getBlockLength() != 0) {
-            block = readBlock(++count);
-            result.add(block);
-        }
+
+//        inputStream.delegate = coerceInputStream(input);
+//        inputStream.pos = 0;
+//        inputStream.readByte = function() {
+//            this.pos++;
+//            return this.delegate.readByte();
+//        };
+//        if (inputStream.delegate.eof) {
+//            inputStream.eof = inputStream.delegate.eof.bind(inputStream.delegate);
+//        }
+//        var outputStream = new Stream();
+//        outputStream.pos = 0;
+//        outputStream.writeByte = function() { this.pos++; };
+
         return result;
     }
 
@@ -63,6 +88,79 @@ public class ExtendedBzipInputStream extends InputStream {
         StreamBlock inputStream = new StreamBlock();
 
         return new Block();
+    }
+
+    public void getNextBlock() throws IOException {
+        int i, j, k;
+        BitReader reader = this.reader;
+        // this is get_next_block() function from micro-bunzip:
+  /* Read in header signature and CRC, then validate signature.
+     (last block signature means CRC is for whole file, return now) */
+        String h = reader.pi();
+        if (SQRTPI.equals(h)) { // last block
+            return; /* no more blocks */
+        }
+        if (!WHOLEPI.equals(h)) {
+             throw new UnsupportedOperationException("non bzip data -2");
+        }
+        this.targetBlockCRC = reader.read(32) >>> 0; // (convert to unsigned)
+        this.streamCRC = (this.targetBlockCRC ^
+                ((this.streamCRC << 1) | (this.streamCRC>>>31))) >>> 0;
+  /* We can add support for blockRandomised if anybody complains.  There was
+     some code for this in busybox 1.0.0-pre3, but nobody ever noticed that
+     it didn't actually work. */
+//        if (reader.read(1))
+//            _throw(Err.OBSOLETE_INPUT);
+        byte origPointer = reader.read(24);
+        if (origPointer > this.dbufSize) {
+            throw new UnsupportedOperationException("initial position out of bounds");
+
+        }
+  /* mapping table: if some byte values are never used (encoding things
+     like ascii text), the compression code removes the gaps to have fewer
+     symbols to deal with, and writes a sparse bitfield indicating which
+     values were present.  We make a translation table to convert the symbols
+     back to the corresponding bytes. */
+        int t = reader.read(16);
+        byte[] symToByte = new byte[256];
+        byte symTotal = 0;
+        for (i = 0; i < 16; i++) {
+            if ((t & (1 << (0xF - i))) != 0) {
+                int o = i * 16;
+                k = reader.read(16);
+                for (j = 0; j < 16; j++)
+                    if ((k & (1 << (0xF - j))) != 0)
+                        symToByte[symTotal++] = (byte) (o + j);
+            }
+        }
+
+        /* How many different huffman coding groups does this block use? */
+        // TODO huffman
+    }
+
+
+
+
+    public void startBunzip() throws IOException {
+        byte[] buf = new byte[4];
+        StringBuilder sb = new StringBuilder();
+
+        if (this.file.read(buf, 0, 4) != 4 ||
+                "BZh".equals(sb.append(buf[0]).append(buf[1]).append(buf[2]).toString())) {
+            throw new IllegalArgumentException("can't read magic bytes of bzip archive");
+        }
+
+        int level = buf[3] - 0x30;
+        if (level < 1 || level > 9) {
+            throw new IllegalArgumentException("magic bytes are our of range");
+        }
+
+        /* Fourth byte (ascii '1'-'9'), indicates block size in units of 100k of
+     uncompressed data.  Allocate intermediate buffer for block. */
+        this.dbufSize = 100000 * level;
+        this.nextoutput = 0;
+       // this.outputStream = outputStream;
+        this.streamCRC = 0;
     }
 
     /**

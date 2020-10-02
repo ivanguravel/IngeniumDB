@@ -1,9 +1,6 @@
 package org.ivzh.bzip.indexer.dto;
 
 public class StreamBlock {
-
-
-
     public int read(byte[] buffer, int bufOffset, int length) {
         byte bytesRead = 0;
         while (bytesRead < length) {
