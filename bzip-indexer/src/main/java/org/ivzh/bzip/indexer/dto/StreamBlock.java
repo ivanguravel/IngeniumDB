@@ -1,7 +1,12 @@
 package org.ivzh.bzip.indexer.dto;
 
+import java.io.IOException;
+import java.io.RandomAccessFile;
+
 public class StreamBlock {
-    public int read(byte[] buffer, int bufOffset, int length) {
+    public RandomAccessFile randomAccessFile;
+    public int pos = 0;
+    public int read(byte[] buffer, int bufOffset, int length) throws IOException {
         byte bytesRead = 0;
         while (bytesRead < length) {
             byte c = this.readByte();
@@ -15,7 +20,7 @@ public class StreamBlock {
     }
 
     // mock 4 now
-    public byte readByte() {
+    public byte readByte() throws IOException {
         return 0;
     }
 }

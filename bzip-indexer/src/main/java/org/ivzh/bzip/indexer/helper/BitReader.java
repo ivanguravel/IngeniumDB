@@ -11,9 +11,9 @@ public class BitReader {
 
      private final RandomAccessFile raf;
 
-     private int bitOffset;
+    public int bitOffset;
      private byte curByte;
-     private boolean hasByte;
+     public boolean hasByte;
 
     public BitReader(RandomAccessFile raf) {
         this.raf = raf;

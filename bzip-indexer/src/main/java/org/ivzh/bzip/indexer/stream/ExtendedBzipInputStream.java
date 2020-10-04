@@ -31,11 +31,14 @@ public class ExtendedBzipInputStream extends InputStream {
 
     private RandomAccessFile file;
     private BitReader reader;
-    private CRC32 crc32;
+    private CRC32 blockCRC;
     private StreamBlock streamBlock;
+
+    StreamBlockOutput outputStream;
 
     int dbufSize;
     int nextoutput;
+    int outputsize;
     int streamCRC;
 
     int targetBlockCRC;
@@ -56,13 +59,20 @@ public class ExtendedBzipInputStream extends InputStream {
             throw new UnsupportedOperationException(e.getMessage());
         }
         this.reader = new BitReader(file);
-        this.crc32 = new CRC32();
+        this.blockCRC = new CRC32();
         this.streamBlock = new StreamBlock();
-        try {
-            startBunzip();
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
+//        try {
+//            startBunzip();
+//        } catch (IOException e) {
+//            e.printStackTrace();
+//        }
+    }
+
+    private ExtendedBzipInputStream(RandomAccessFile file, StreamBlockInput inputStream, StreamBlockOutput outputStream) throws IOException {
+        this.writePos = this.writeCurrent = this.writeCount = 0;
+        this.file = file;
+        this.reader = new BitReader(this.file);
+        this.startBunzip(inputStream, outputStream);
     }
 
     @Override
@@ -70,25 +80,124 @@ public class ExtendedBzipInputStream extends InputStream {
         return 0;
     }
 
+
+    public void startBunzip(StreamBlockInput inputStream, StreamBlockOutput outputStream) throws IOException {
+        byte[] buf = new byte[4];
+        StringBuilder sb = new StringBuilder();
+
+        if (this.file.read(buf, 0, 4) != 4 ||
+                "BZh".equals(sb.append(buf[0]).append(buf[1]).append(buf[2]).toString())) {
+            throw new IllegalArgumentException("can't read magic bytes of bzip archive");
+        }
+
+        int level = buf[3] - 0x30;
+        if (level < 1 || level > 9) {
+            throw new IllegalArgumentException("magic bytes are our of range");
+        }
+
+        /* Fourth byte (ascii '1'-'9'), indicates block size in units of 100k of
+     uncompressed data.  Allocate intermediate buffer for block. */
+        this.dbufSize = 100000 * level;
+        this.nextoutput = 0;
+        // this.outputStream = outputStream;
+        this.streamCRC = 0;
+    }
+
     public List<Block> indexBzip() throws IOException {
-        StreamBlock streamBlock = initialiseStream();
+        //StreamBlock streamBlock = initialiseStream();
         int count = 0;
         List<Block> result = new LinkedList<>();
 
-//        inputStream.delegate = coerceInputStream(input);
-//        inputStream.pos = 0;
-//        inputStream.readByte = function() {
-//            this.pos++;
-//            return this.delegate.readByte();
-//        };
-//        if (inputStream.delegate.eof) {
-//            inputStream.eof = inputStream.delegate.eof.bind(inputStream.delegate);
-//        }
-//        var outputStream = new Stream();
-//        outputStream.pos = 0;
-//        outputStream.writeByte = function() { this.pos++; };
+        Block block = new Block();
+
+        StreamBlockInput inputStream = new StreamBlockInput();
+        inputStream.randomAccessFile = file;
+        StreamBlockOutput outputStream = new StreamBlockOutput();
+        outputStream.pos = 0;
+        this.outputStream = outputStream;
+
+        ExtendedBzipInputStream bz = new ExtendedBzipInputStream(this.file, inputStream, outputStream);
+        int blockSize = bz.dbufSize;
+        while (true) {
+            if ( inputStream.eof()) break;
+
+            int position = inputStream.pos *8 + bz.reader.bitOffset;
+            if (bz.reader.hasByte) {
+                position -= 8;
+            }
+
+            if (bz.initBlock()) {
+                int start = outputStream.pos;
+                bz.readBunzip();
+                block.setBlockOffset(position);
+                block.setBlockLength(outputStream.pos - start);
+            } else {
+                byte crc = bz.reader.read(32); // (but we ignore the crc)
+                if (!inputStream.eof()) {
+                    // note that start_bunzip will also resync the bit reader to next byte
+                    bz.startBunzip(inputStream, outputStream);
+
+                    if (bz.dbufSize == blockSize) {
+                        System.err.println("shouldn't change block size within multistream file");
+                    }
+                } else {
+                    break;
+                }
+            }
+        }
 
         return result;
+    }
+
+
+    int readBunzip () {
+        int copies, previous, outbyte;
+    /* james@jamestaylor.org: writeCount goes to -1 when the buffer is fully
+       decoded, which results in this returning RETVAL_LAST_BLOCK, also
+       equal to -1... Confusing, I'm returning 0 here to indicate no
+       bytes written into the buffer */
+        if (this.writeCount < 0) {
+            return 0;
+        }
+
+        int gotcount = 0;
+        int[] dbuf = this.dbuf;
+        int pos = this.writePos;
+        int current = this.writeCurrent;
+        int dbufCount = this.writeCount;
+        outputsize = this.outputsize;
+        int run = this.writeRun;
+
+        while (dbufCount == 0) {
+            dbufCount--;
+            previous = current;
+            pos = dbuf[pos];
+            current = pos & 0xff;
+            pos >>= 8;
+            if (run++ == 3) {
+                copies = current;
+                outbyte = previous;
+                current = -1;
+            } else {
+                copies = 1;
+                outbyte = current;
+            }
+            this.blockCRC.updateCRCRun(outbyte, copies);
+            while (copies-- != 0) {
+                this.outputStream.writeByte(outbyte);
+                this.nextoutput++;
+            }
+            if (current != previous)
+                run = 0;
+        }
+        this.writeCount = dbufCount;
+        // check CRC
+        if (this.blockCRC.getCRC() != this.targetBlockCRC) {
+            throw new UnsupportedOperationException("Bad block CRC " +
+                    "(got " + this.blockCRC.getCRC() +
+                    " expected " + this.targetBlockCRC + ")");
+        }
+        return this.nextoutput;
     }
 
     public Block readBlock(int blockNumber) throws IOException {
@@ -96,6 +205,17 @@ public class ExtendedBzipInputStream extends InputStream {
         StreamBlock inputStream = new StreamBlock();
 
         return new Block();
+    }
+
+
+    public boolean initBlock() throws IOException {
+        boolean moreBlocks = getNextBlock();
+        if ( !moreBlocks ) {
+            this.writeCount = -1;
+            return false; /* no more blocks */
+        }
+        this.blockCRC = new CRC32();
+        return true;
     }
 
     public boolean getNextBlock() throws IOException {
@@ -410,27 +530,7 @@ public class ExtendedBzipInputStream extends InputStream {
         return src;
     }
 
-    public void startBunzip() throws IOException {
-        byte[] buf = new byte[4];
-        StringBuilder sb = new StringBuilder();
 
-        if (this.file.read(buf, 0, 4) != 4 ||
-                "BZh".equals(sb.append(buf[0]).append(buf[1]).append(buf[2]).toString())) {
-            throw new IllegalArgumentException("can't read magic bytes of bzip archive");
-        }
-
-        int level = buf[3] - 0x30;
-        if (level < 1 || level > 9) {
-            throw new IllegalArgumentException("magic bytes are our of range");
-        }
-
-        /* Fourth byte (ascii '1'-'9'), indicates block size in units of 100k of
-     uncompressed data.  Allocate intermediate buffer for block. */
-        this.dbufSize = 100000 * level;
-        this.nextoutput = 0;
-        // this.outputStream = outputStream;
-        this.streamCRC = 0;
-    }
 
     /**
      * Reads the stream header and checks that the data appears to be a valid BZip2 stream
