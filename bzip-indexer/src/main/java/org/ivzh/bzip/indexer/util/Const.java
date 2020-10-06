@@ -8,14 +8,20 @@ public interface Const {
     int HUFFMAN_MAXIMUM_ALPHABET_SIZE = 258;
     int HUFFMAN_DECODE_MAXIMUM_CODE_LENGTH = 23;
 
-
-    /**
-     * 'B' 'Z' that marks the start of a BZip2 stream
-     */
     int STREAM_START_MARKER_1 = 0x425a;
-
-    /**
-     * 'h' that distinguishes BZip from BZip2
-     */
     int STREAM_START_MARKER_2 = 0x68;
+    int STREAM_END_MARKER_1 = 0x177245;
+    int STREAM_END_MARKER_2 = 0x385090;
+
+    int BLOCK_HEADER_MARKER_1 = 0x314159;
+    int BLOCK_HEADER_MARKER_2 = 0x265359;
+
+    int HUFFMAN_SYMBOL_RUNA = 0;
+    int HUFFMAN_SYMBOL_RUNB = 1;
+
+    int HUFFMAN_GROUP_RUN_LENGTH = 50;
+    int HUFFMAN_MINIMUM_TABLES = 2;
+    int HUFFMAN_MAXIMUM_TABLES = 6;
+    int HUFFMAN_MAXIMUM_SELECTORS = (900000 / HUFFMAN_GROUP_RUN_LENGTH) + 1;
+
 }

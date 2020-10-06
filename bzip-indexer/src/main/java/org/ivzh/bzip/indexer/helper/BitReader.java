@@ -1,7 +1,7 @@
 package org.ivzh.bzip.indexer.helper;
 
 import java.io.IOException;
-import java.io.RandomAccessFile;
+import java.io.InputStream;
 
 public class BitReader {
 
@@ -9,64 +9,115 @@ public class BitReader {
 
     private static final char[] HEX_ARRAY = "0123456789ABCDEF".toCharArray();
 
-     private final RandomAccessFile raf;
+    private InputStream inputStream;
+    private int bitBuffer;
+    private int bitCount;
 
-    public int bitOffset;
-     private byte curByte;
-     public boolean hasByte;
+    public BitReader (final InputStream inputStream) {
 
-    public BitReader(RandomAccessFile raf) {
-        this.raf = raf;
+        this.inputStream = inputStream;
 
-        this.bitOffset = 0;
-        this.curByte = 0;
-        this.hasByte = false;
     }
 
-    public void ensureByte() throws IOException {
-        if (!this.hasByte) {
-            this.curByte = this.raf.readByte();
-            this.hasByte = true;
-        }
-    }
+    public int readBits (final int count) throws IOException {
 
-    // reads bits from the buffer
-    public byte read(int bits) throws IOException {
-        byte result = 0;
-        while (bits > 0) {
-            this.ensureByte();
-            int remaining = 8 - this.bitOffset;
-            // if we're in a byte
-            if (bits >= remaining) {
-                result <<= remaining;
-                result |= BITMASK[remaining] & this.curByte;
-                this.hasByte = false;
-                this.bitOffset = 0;
-                bits -= remaining;
-            } else {
-                result <<= bits;
-                int shift = remaining - bits;
-                result |= (this.curByte & (BITMASK[bits] << shift)) >> shift;
-                this.bitOffset += bits;
-                bits = 0;
+        int bitBuffer = this.bitBuffer;
+        int bitCount = this.bitCount;
+
+        if (bitCount < count) {
+            while (bitCount < count) {
+                int byteRead = this.inputStream.read();
+
+                if (byteRead < 0) {
+                    throw new UnsupportedOperationException ("Insufficient data");
+                }
+
+                bitBuffer = (bitBuffer << 8) | byteRead;
+                bitCount += 8;
             }
+
+            this.bitBuffer = bitBuffer;
         }
-        return result;
+
+        bitCount -= count;
+        this.bitCount = bitCount;
+
+        return (bitBuffer >>> bitCount) & ((1 << count) - 1);
+
     }
 
-    // seek to an arbitrary point in the buffer (expressed in bits)
-    public void seek(int pos) throws IOException {
-        int n_bit = pos % 8;
-        int n_byte = (pos - n_bit) / 8;
-        this.bitOffset = n_bit;
-        this.raf.seek(n_byte);
-        this.hasByte = false;
+    public boolean readBoolean() throws IOException {
+
+        int bitBuffer = this.bitBuffer;
+        int bitCount = this.bitCount;
+
+        if (bitCount > 0) {
+            bitCount--;
+        } else {
+            int byteRead = this.inputStream.read();
+
+            if (byteRead < 0) {
+                throw new UnsupportedOperationException ("Insufficient data");
+            }
+
+            bitBuffer = (bitBuffer << 8) | byteRead;
+            bitCount += 7;
+            this.bitBuffer = bitBuffer;
+        }
+
+        this.bitCount = bitCount;
+        return ((bitBuffer & (1 << bitCount))) != 0;
+
     }
+
+    public int readUnary() throws IOException {
+
+        int bitBuffer = this.bitBuffer;
+        int bitCount = this.bitCount;
+        int unaryCount = 0;
+
+        for (;;) {
+            if (bitCount > 0) {
+                bitCount--;
+            } else  {
+                int byteRead = this.inputStream.read();
+
+                if (byteRead < 0) {
+                    throw new UnsupportedOperationException ("Insufficient data");
+                }
+
+                bitBuffer = (bitBuffer << 8) | byteRead;
+                bitCount += 7;
+            }
+
+            if (((bitBuffer & (1 << bitCount))) == 0) {
+                this.bitBuffer = bitBuffer;
+                this.bitCount = bitCount;
+                return unaryCount;
+            }
+            unaryCount++;
+        }
+
+    }
+
+
+    /**
+     * Reads 32 bits of input as an integer
+     * @return The integer read
+     * @throws IOException if 32 bits are not available in the input stream
+     */
+    public int readInteger() throws IOException {
+
+        return (readBits (16) << 16) | (readBits (16));
+
+    }
+
 
     public String pi() throws IOException {
         byte[] buf = new byte[6];
         for (int i = 0; i < buf.length; i++) {
-            buf[i] = this.read(8);
+
+            buf[i] = (byte) this.readBits(8);
         }
         return bufToHex(buf);
     }

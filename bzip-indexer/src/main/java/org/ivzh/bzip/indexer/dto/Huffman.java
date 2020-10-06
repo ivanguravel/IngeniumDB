@@ -1,6 +1,5 @@
 package org.ivzh.bzip.indexer.dto;
 
-import java.io.IOException;
 
 import static org.ivzh.bzip.indexer.util.Const.HUFFMAN_DECODE_MAXIMUM_CODE_LENGTH;
 import static org.ivzh.bzip.indexer.util.Const.HUFFMAN_MAXIMUM_ALPHABET_SIZE;

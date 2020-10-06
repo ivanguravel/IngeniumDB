@@ -57,7 +57,7 @@ public class CRC32 {
 
     }
 
-    public void updateCRCRun(final int value, int count) {
+    public void updateCRC (final int value, int count) {
 
         int crc = this.crc;
 
